@@ -153,6 +153,28 @@ fn get_string_attr(name: &str, attrs: &[syn::Attribute]) -> Option<String> {
 	None
 }
 
+fn get_string_name_value_attr(outer: &str, name: &str, attrs: &[syn::Attribute]) -> Option<String> {
+	for attr in attrs {
+		let attr = attr.parse_meta();
+
+		if let Ok(syn::Meta::List(ref list)) = attr {
+			if list.ident == outer {
+				for thing in &list.nested {
+					if let syn::NestedMeta::Meta(syn::Meta::NameValue(ref nameval)) = thing {
+						if nameval.ident == name {
+							if let syn::Lit::Str(str_lit) = &nameval.lit {
+								return Some(str_lit.value());
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	None
+}
+
 fn has_flag_attr(name: &str, attrs: &[syn::Attribute]) -> bool {
 	for attr in attrs {
 		let attr = attr.parse_meta();
@@ -205,9 +227,14 @@ pub fn app_route_derive(input: TokenStream) -> TokenStream {
 	let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
 	let route_string = get_string_attr("route", &input.attrs);
+	let response_type_name = get_string_name_value_attr("route", "response", &input.attrs)
+		.unwrap_or_else(|| "()".to_string());
+	let response_type: syn::Type =
+		syn::parse_str(&response_type_name).expect("Invalid type for Response");
 
-	let url_route = route_string
-		.expect("derive(AppRoute) requires a #[route(\"/your/route/here\")] attribute on the struct");
+	let url_route = route_string.expect(
+		"derive(AppRoute) requires a #[route(\"/your/route/here\")] attribute on the struct",
+	);
 
 	let (route_regex_str, format_str) =
 		route_to_regex(&url_route).expect("Could not convert route attribute to a valid regex");
@@ -334,6 +361,7 @@ pub fn app_route_derive(input: TokenStream) -> TokenStream {
 
 	let app_route_impl = quote! {
 		impl #impl_generics app_route::AppRoute for #name #ty_generics #where_clause {
+			type Response = #response_type;
 
 			fn path_pattern() -> String {
 				#route_regex_str.to_string()

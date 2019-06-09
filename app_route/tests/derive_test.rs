@@ -592,3 +592,8 @@ fn test_only_question_mark() {
 		}
 	);
 }
+
+#[derive(AppRoute, Debug)]
+#[route("/api/version")]
+#[route(response = "String")]
+struct ApiVersion {}
